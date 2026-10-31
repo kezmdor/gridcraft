@@ -4,10 +4,10 @@
 use egui::{Event, Key, Modifiers, PointerButton, Pos2};
 use gridcraft_engine::core::{CellRef, Value};
 use gridcraft_engine::{Mode, Session};
-use gridcraft_ui_egui::{SheetApp, grid::Geo};
+use gridcraft_ui_egui::grid::Geo;
 use serde_json::json;
 
-type Harness = egui_kittest::Harness<'static, SheetApp>;
+use crate::common::Harness;
 
 /// 1, 2, 3 in A1:A3 and `selected` selected.
 fn harness(selected: &str) -> Harness {
@@ -20,15 +20,7 @@ fn harness_at(first: &str, selected: &str) -> Harness {
     session.new_workbook();
     session.execute("range.setValues", json!({"range": first, "values": [[1], [2], [3]]})).unwrap();
     session.execute("selection.set", json!({"range": selected})).unwrap();
-    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_ui_state(
-        |ui, app: &mut SheetApp| {
-            app.logic(ui.ctx());
-            app.ui(ui);
-        },
-        SheetApp::new(session, Default::default()),
-    );
-    h.run_steps(4);
-    h
+    crate::common::harness_with(crate::common::builder().with_size(egui::vec2(1200.0, 800.0)), crate::common::app(session), 4)
 }
 
 /// The AutoSum button: a menu-style run.
