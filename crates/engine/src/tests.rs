@@ -251,9 +251,16 @@ fn a_leading_plus_or_minus_starts_a_formula() {
     // #2023: like Excel (and Lotus 1-2-3 before it), typing `+5+4` enters the formula `=+5+4`.
     let mut s = s();
     let input = |s: &Session, a: &str| s.doc().unwrap().wb.active().unwrap().cell(CellRef::parse(a).unwrap()).map(|c| c.input_text());
-    for (cell, typed, value) in
-        [("A1", "+5+4", 9.0), ("A2", "-5+4", -1.0), ("A3", "--5", 5.0), ("A4", "-3/4", -0.75), ("A5", "+A1*2", 18.0), ("A6", "-(A1)", -9.0)]
-    {
+    for (cell, typed, value) in [
+        ("A1", "+5+4", 9.0),
+        ("A2", "-5+4", -1.0),
+        ("A3", "--5", 5.0),
+        ("A4", "-3/4", -0.75),
+        ("A5", "+A1*2", 18.0),
+        ("A6", "-(A1)", -9.0),
+        ("A7", "+1/30", 1.0 / 30.0),
+        ("A8", "-1/30", -1.0 / 30.0),
+    ] {
         s.execute("cell.set", json!({"cell": cell, "input": typed})).unwrap_or_else(|e| panic!("{typed}: {e}"));
         assert_eq!(input(&s, cell), Some(format!("={typed}")), "{typed}");
         assert_eq!(v(&s, cell), Value::Number(value), "{typed}");
@@ -281,6 +288,7 @@ fn a_leading_plus_or_minus_starts_a_formula() {
         ("'-abc", "'-abc"),
         ("--", "--"),
         ("+49 170 1234567", "+49 170 1234567"),
+        ("+1:30", "+1:30"),
     ] {
         s.execute("cell.set", json!({"cell": "B2", "input": typed})).unwrap();
         let before = v(&s, "B2");
@@ -294,16 +302,19 @@ fn a_leading_plus_or_minus_starts_a_formula() {
     }
     // As observed in Excel for the web, an entry that doesn't read as a formula stays text, and
     // one that does but names nothing known is #NAME?. Only `=` entries are refused.
-    for typed in ["--", "-----", "+5+", "+49 170 1234567"] {
+    for typed in ["--", "-----", "+5+", "+49 170 1234567", "+1:30"] {
         s.execute("cell.set", json!({"cell": "C1", "input": typed})).unwrap_or_else(|e| panic!("{typed}: {e}"));
         assert_eq!(v(&s, "C1"), Value::text(typed), "{typed}");
         assert_eq!(input(&s, "C1").as_deref(), Some(typed), "{typed}");
     }
     s.execute("cell.set", json!({"cell": "C2", "input": "- item"})).unwrap();
     assert_eq!(v(&s, "C2"), Value::Error(gridcraft_core::CellError::Name));
+    // Excel for the web keeps `+1:30` as text (above) but reads `-1:30` as a formula (rows 1 to 30).
+    s.execute("cell.set", json!({"cell": "C40", "input": "-1:30"})).unwrap();
+    assert_eq!(input(&s, "C40").as_deref(), Some("=-1:30"));
     let e = s.execute("cell.set", json!({"cell": "C1", "input": "=--"})).unwrap_err().to_string();
     assert!(e.contains("problem with this formula"), "{e}");
-    assert_eq!(v(&s, "C1"), Value::text("+49 170 1234567"), "a refused entry keeps the cell");
+    assert_eq!(v(&s, "C1"), Value::text("+1:30"), "a refused entry keeps the cell");
     // Pasted or split by Text to Columns, the same rule applies.
     s.execute("edit.paste", json!({"at": "D1", "text": "--\t-5+4\n"})).unwrap();
     assert_eq!(v(&s, "D1"), Value::text("--"));
